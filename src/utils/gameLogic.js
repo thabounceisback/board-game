@@ -65,12 +65,12 @@ export function resolveAIRollChoice(strategy, context) {
 /**
  * Returns the tile choice for a given tile type.
  * tileType: "risk" | "recon" | "sampling"
- * Returns "quick"|"deep" for risk, "auto"|"manual" for recon, 90|95|99 for sampling.
+ * Returns "quick"|"deep" for risk, "automated"|"manual" for recon, 90|95|99 for sampling.
  */
 export function resolveAITileChoice(strategy, tileType) {
   if (strategy === "aggressive" || strategy === "overconfident") {
     if (tileType === "risk") return "deep";
-    if (tileType === "recon") return "auto";
+    if (tileType === "recon") return "automated";
     if (tileType === "sampling") return 90;
   }
   if (strategy === "conservative") {
@@ -80,7 +80,7 @@ export function resolveAITileChoice(strategy, tileType) {
   }
   if (strategy === "chaotic") {
     if (tileType === "risk") return Math.random() < 0.5 ? "quick" : "deep";
-    if (tileType === "recon") return Math.random() < 0.5 ? "manual" : "auto";
+    if (tileType === "recon") return Math.random() < 0.5 ? "manual" : "automated";
     if (tileType === "sampling") return [90, 95, 99][Math.floor(Math.random() * 3)];
   }
   return tileType === "sampling" ? 95 : "quick";

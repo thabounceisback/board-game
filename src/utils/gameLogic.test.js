@@ -106,9 +106,9 @@ describe("resolveAIRollChoice", () => {
 });
 
 describe("resolveAITileChoice", () => {
-  it("aggressive picks deep/auto/90", () => {
+  it("aggressive picks deep/automated/90", () => {
     expect(resolveAITileChoice("aggressive", "risk")).toBe("deep");
-    expect(resolveAITileChoice("aggressive", "recon")).toBe("auto");
+    expect(resolveAITileChoice("aggressive", "recon")).toBe("automated");
     expect(resolveAITileChoice("aggressive", "sampling")).toBe(90);
   });
   it("conservative picks quick/manual/99", () => {
@@ -116,9 +116,9 @@ describe("resolveAITileChoice", () => {
     expect(resolveAITileChoice("conservative", "recon")).toBe("manual");
     expect(resolveAITileChoice("conservative", "sampling")).toBe(99);
   });
-  it("overconfident picks same as aggressive (deep/auto/90)", () => {
+  it("overconfident picks same as aggressive (deep/automated/90)", () => {
     expect(resolveAITileChoice("overconfident", "risk")).toBe("deep");
-    expect(resolveAITileChoice("overconfident", "recon")).toBe("auto");
+    expect(resolveAITileChoice("overconfident", "recon")).toBe("automated");
     expect(resolveAITileChoice("overconfident", "sampling")).toBe(90);
   });
   it("chaotic returns a valid choice for each tile type", () => {
@@ -131,7 +131,7 @@ describe("resolveAITileChoice", () => {
       samplingChoices.add(resolveAITileChoice("chaotic", "sampling"));
     }
     expect([...riskChoices].every((c) => ["quick", "deep"].includes(c))).toBe(true);
-    expect([...reconChoices].every((c) => ["manual", "auto"].includes(c))).toBe(true);
+    expect([...reconChoices].every((c) => ["manual", "automated"].includes(c))).toBe(true);
     expect([...samplingChoices].every((c) => [90, 95, 99].includes(c))).toBe(true);
   });
 });
