@@ -41,7 +41,6 @@ export default function EventModal({
   eventResult,
   currentPlayerIdx,
   players,
-  playerHours,
   onRiskChoice,
   onReconChoice,
   onSamplingChoice,

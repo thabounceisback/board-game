@@ -65,6 +65,8 @@ export default function App() {
   const [log, setLog] = useState([]);
   const [gameSpeed, setGameSpeed] = useState("fast"); // "fast" | "normal"
   const logRef = useRef(null);
+  // Always holds the latest triggerAITurn — lets advanceTurn's setTimeout call it without a stale closure
+  const triggerAITurnRef = useRef(null);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -110,26 +112,28 @@ export default function App() {
     setCurrentPlayer(nextIdx);
     setPendingRollChoice(null);
     if (nextIdx !== 0) {
-      // AI turn
-      setTimeout(() => triggerAITurn(nextIdx), gameSpeed === "fast" ? 300 : 800);
+      // Use ref so the timer always calls the latest triggerAITurn (avoids stale closure)
+      const delay = gameSpeed === "fast" ? 300 : 800;
+      setTimeout(() => triggerAITurnRef.current?.(nextIdx), delay);
     }
-  }, [gameSpeed]); // eslint-disable-line
+  }, [gameSpeed]);
 
   // --- After event/card resolves, check hours triggers and advance turn ---
   const afterTurnEffects = useCallback((playerIdx, updatedPlayers, updatedTrails, updatedHalfRolls) => {
     let p = updatedPlayers[playerIdx];
     let finalPlayers = [...updatedPlayers];
+    let latestTrails = updatedTrails; // chain trail updates to avoid losing intermediate entries
 
     // Promotion check
     if (checkPromotion(p.hours)) {
       const oldPos = p.position;
       finalPlayers = movePlayer(playerIdx, PROMOTION_ADVANCE, finalPlayers);
-      const updatedTrails2 = updateTrail(playerIdx, oldPos, updatedTrails);
-      setTrailHistory(updatedTrails2);
+      latestTrails = updateTrail(playerIdx, oldPos, latestTrails);
       finalPlayers[playerIdx] = { ...finalPlayers[playerIdx], hours: PROMOTION_HOURS_RESET };
       addLog(`🎉 ${p.name} hit ${p.hours} hours — Early Promotion! +${PROMOTION_ADVANCE} tiles, hours reset to ${PROMOTION_HOURS_RESET}`);
       // Check win after promotion
       if (checkWin(playerIdx, finalPlayers[playerIdx].position)) {
+        setTrailHistory(latestTrails);
         setPlayers(finalPlayers);
         setWinner(playerIdx);
         setGameState("gameover");
@@ -141,12 +145,12 @@ export default function App() {
     if (checkBurnout(finalPlayers[playerIdx].hours)) {
       const oldPos = finalPlayers[playerIdx].position;
       finalPlayers = movePlayer(playerIdx, BURNOUT_ADVANCE, finalPlayers);
-      const updatedTrails3 = updateTrail(playerIdx, oldPos, updatedTrails);
-      setTrailHistory(updatedTrails3);
+      latestTrails = updateTrail(playerIdx, oldPos, latestTrails);
       finalPlayers[playerIdx] = { ...finalPlayers[playerIdx], hours: finalPlayers[playerIdx].hours + BURNOUT_HOURS_RESTORE };
       addLog(`💀 ${p.name} burned out! Back ${Math.abs(BURNOUT_ADVANCE)} tiles, +${BURNOUT_HOURS_RESTORE} ⏱️`);
     }
 
+    setTrailHistory(latestTrails);
     setPlayers(finalPlayers);
     setHalfNextRoll(updatedHalfRolls);
 
@@ -325,6 +329,8 @@ export default function App() {
 
     executeRoll(playerIdx, rollChoice, players, trailHistory, halfNextRoll);
   }, [gameState, players, trailHistory, halfNextRoll, gameSpeed, addLog, executeRoll]);
+  // Keep ref in sync so advanceTurn's setTimeout always calls the latest version
+  triggerAITurnRef.current = triggerAITurn;
 
   // --- Event resolution ---
   const resolveEventWithChoice = useCallback((choice) => {
@@ -385,11 +391,13 @@ export default function App() {
       badText = eventChoice === "automated" ? currentEvent.autoBad : currentEvent.manualBad;
     } else if (currentEvent.type === "boss") {
       passThreshold = 4;
+      stakes = 4;
       goodText = currentEvent.pass;
       badText = currentEvent.fail;
     } else {
       // dice
       passThreshold = 3;
+      stakes = 2;
       goodText = currentEvent.good;
       badText = currentEvent.bad;
     }
@@ -441,8 +449,8 @@ export default function App() {
     let updatedPlayers = [...players];
     const p = updatedPlayers[currentPlayer];
 
-    // Apply hours delta
-    if (card.hoursDelta !== 0 || card.hoursDelta === "LOSE_ALL") {
+    // Apply hours delta (skip cards with no hours effect; "LOSE_ALL" !== 0 so it passes through)
+    if (card.hoursDelta !== 0) {
       updatedPlayers = applyHours(currentPlayer, card.hoursDelta, updatedPlayers);
     }
 
@@ -656,7 +664,6 @@ export default function App() {
           eventResult={eventResult}
           currentPlayerIdx={currentPlayer}
           players={players}
-          playerHours={players[currentPlayer]?.hours ?? 0}
           onRiskChoice={resolveEventWithChoice}
           onReconChoice={resolveEventWithChoice}
           onSamplingChoice={resolveEventWithChoice}
@@ -671,7 +678,6 @@ export default function App() {
         <CardDrawModal
           card={currentCard}
           onDismiss={handleDismissCard}
-          playerName={players[currentPlayer]?.name}
         />
       )}
     </div>
