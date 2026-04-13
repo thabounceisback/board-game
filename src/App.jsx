@@ -1,106 +1,26 @@
+// src/App.jsx
 import { useState, useCallback, useEffect, useRef } from "react";
+import { BOARD_TILES, TILE_CONFIG, BOARD_SIZE, TILE_TYPES } from "./data/board";
+import { EVENTS } from "./data/events";
+import { PLAYERS, STARTING_HOURS, PROMOTION_ADVANCE, PROMOTION_HOURS_RESET,
+         BURNOUT_ADVANCE, BURNOUT_HOURS_RESTORE, BOARD_FINISH } from "./data/players";
+import { CARD_DECK } from "./data/cards";
+import {
+  rollDice, isDoubles, shuffleDeck, drawCard,
+  resolveAIRollChoice, resolveAITileChoice,
+  applyHoursDelta, checkPromotion, checkBurnout, checkClosingSprint,
+} from "./utils/gameLogic";
+import { SAMPLING_OUTCOMES } from "./components/EventModal";
+import GameBoard from "./components/GameBoard";
+import PlayerPanel from "./components/PlayerPanel";
+import DiceControl from "./components/DiceControl";
+import EventModal from "./components/EventModal";
+import CardDrawModal from "./components/CardDrawModal";
 
-const BOARD_SIZE = 40;
-
-const TILE_TYPES = {
-  START: "start",
-  RISK: "risk",
-  RECON: "recon",
-  SAMPLING: "sampling",
-  MATERIALITY: "materiality",
-  DATA_QUALITY: "data_quality",
-  INSIGHT: "insight",
-  SHORTCUT: "shortcut",
-  SETBACK: "setback",
-  BOSS: "boss",
-  FINISH: "finish",
-  NORMAL: "normal",
-};
-
-const TILE_CONFIG = {
-  [TILE_TYPES.START]: { emoji: "🏁", color: "#2d6a4f", label: "Start" },
-  [TILE_TYPES.RISK]: { emoji: "⚠️", color: "#e63946", label: "Risk Event" },
-  [TILE_TYPES.RECON]: { emoji: "📊", color: "#457b9d", label: "Recon Challenge" },
-  [TILE_TYPES.SAMPLING]: { emoji: "🎯", color: "#e9c46a", label: "Sampling Test" },
-  [TILE_TYPES.MATERIALITY]: { emoji: "💰", color: "#f4a261", label: "Materiality" },
-  [TILE_TYPES.DATA_QUALITY]: { emoji: "🔍", color: "#264653", label: "Data Quality" },
-  [TILE_TYPES.INSIGHT]: { emoji: "💡", color: "#06d6a0", label: "Insight Bonus" },
-  [TILE_TYPES.SHORTCUT]: { emoji: "🚀", color: "#7209b7", label: "Automation" },
-  [TILE_TYPES.SETBACK]: { emoji: "🐛", color: "#d62828", label: "Bug Found" },
-  [TILE_TYPES.BOSS]: { emoji: "👔", color: "#1d3557", label: "Partner Review" },
-  [TILE_TYPES.FINISH]: { emoji: "🏆", color: "#ffd700", label: "Sign-Off" },
-  [TILE_TYPES.NORMAL]: { emoji: "📋", color: "#6c757d", label: "Workpaper" },
-};
-
-const BOARD_TILES = [
-  TILE_TYPES.START,
-  TILE_TYPES.NORMAL, TILE_TYPES.RISK, TILE_TYPES.NORMAL, TILE_TYPES.SAMPLING,
-  TILE_TYPES.NORMAL, TILE_TYPES.INSIGHT, TILE_TYPES.NORMAL, TILE_TYPES.RECON, TILE_TYPES.NORMAL,
-  TILE_TYPES.MATERIALITY, TILE_TYPES.NORMAL, TILE_TYPES.SHORTCUT, TILE_TYPES.NORMAL, TILE_TYPES.RISK,
-  TILE_TYPES.NORMAL, TILE_TYPES.DATA_QUALITY, TILE_TYPES.NORMAL, TILE_TYPES.NORMAL, TILE_TYPES.SETBACK,
-  TILE_TYPES.BOSS,
-  TILE_TYPES.NORMAL, TILE_TYPES.INSIGHT, TILE_TYPES.NORMAL, TILE_TYPES.SAMPLING,
-  TILE_TYPES.RISK, TILE_TYPES.NORMAL, TILE_TYPES.SHORTCUT, TILE_TYPES.NORMAL, TILE_TYPES.MATERIALITY,
-  TILE_TYPES.NORMAL, TILE_TYPES.DATA_QUALITY, TILE_TYPES.NORMAL, TILE_TYPES.SETBACK, TILE_TYPES.NORMAL,
-  TILE_TYPES.RECON, TILE_TYPES.NORMAL, TILE_TYPES.INSIGHT, TILE_TYPES.NORMAL,
-  TILE_TYPES.FINISH,
-];
-
-const EVENTS = {
-  [TILE_TYPES.RISK]: [
-    { text: "Material misstatement detected in revenue! Roll for investigation depth.", type: "dice", good: "You traced it to a timing error — advance 2!", bad: "It's pervasive. Go back 3 while you expand testing." },
-    { text: "Client changed ERP systems mid-year. How's your data extraction?", type: "dice", good: "Your CDM pipeline handles it smoothly — advance 2!", bad: "Schema mismatch breaks your notebook. Go back 2." },
-    { text: "Unusual journal entry patterns flagged by risk scoring.", type: "dice", good: "False positive — your model is well-calibrated. Advance 1!", bad: "Fraudulent entries confirmed. Go back 3 for expanded procedures." },
-    { text: "Related party transactions surfaced in GL analysis.", type: "dice", good: "Properly disclosed. Advance 2!", bad: "Undisclosed! Expand scope. Go back 3." },
-  ],
-  [TILE_TYPES.RECON]: [
-    { text: "GL-to-TB reconciliation: Does your total match?", type: "dice", good: "Reconciled to the penny! Advance 3!", bad: "Off by $4.2M. Go back 2 to investigate." },
-    { text: "Subledger-to-GL recon — can you tie it out?", type: "dice", good: "Perfect match across all entities! Advance 2!", bad: "Currency conversion gaps found. Go back 2." },
-    { text: "Intercompany elimination check across entities.", type: "dice", good: "All eliminations balance! Advance 2!", bad: "Orphaned entries in Entity 3. Go back 1." },
-  ],
-  [TILE_TYPES.SAMPLING]: [
-    { text: "Statistical sampling time! Pick your confidence level.", type: "dice", good: "Sample extrapolation within tolerable error! Advance 2!", bad: "Projected misstatement exceeds materiality. Go back 2 for expanded sample." },
-    { text: "Non-statistical sampling of disbursements.", type: "dice", good: "No exceptions found! Advance 1!", bad: "3 exceptions in a sample of 25. Go back 2." },
-  ],
-  [TILE_TYPES.MATERIALITY]: [
-    { text: "Planning materiality recalculation triggered!", type: "dice", good: "Materiality increased — fewer items to test! Advance 3!", bad: "Materiality decreased — more testing needed. Go back 1." },
-    { text: "Performance materiality vs. overall materiality check.", type: "dice", good: "Well-calibrated ratio. Advance 1!", bad: "SAD exceeds PM. Expand procedures. Go back 2." },
-  ],
-  [TILE_TYPES.DATA_QUALITY]: [
-    { text: "Data completeness check on GL extract.", type: "dice", good: "100% complete, all periods accounted for! Advance 2!", bad: "Missing 2 months of data. Go back 3 to re-extract." },
-    { text: "Duplicate detection scan on journal entries.", type: "dice", good: "Clean data — no duplicates! Advance 1!", bad: "15,000 duplicate rows found. Go back 1 to clean." },
-    { text: "Data type validation across all CDM fields.", type: "dice", good: "All fields conform to schema! Advance 2!", bad: "Date fields stored as strings. Go back 1 to fix pipeline." },
-  ],
-  [TILE_TYPES.INSIGHT]: [
-    { text: "Your Claude API analysis surfaces a key finding!", advance: 3 },
-    { text: "Automated trend analysis reveals a cost optimization. Client loves it!", advance: 2 },
-    { text: "Your PySpark notebook runs 10x faster than last year's approach!", advance: 2 },
-    { text: "Risk scoring model catches what manual review missed!", advance: 3 },
-  ],
-  [TILE_TYPES.SHORTCUT]: [
-    { text: "You automated the entire procedure with pyod! Skip ahead!", advance: 4 },
-    { text: "Databricks pipeline completes overnight. Jump forward!", advance: 3 },
-    { text: "Reusable notebook from prior engagement saves days!", advance: 3 },
-  ],
-  [TILE_TYPES.SETBACK]: [
-    { text: "Databricks cluster timed out during peak hours.", advance: -3 },
-    { text: "Client sent wrong GL extract — back to data intake.", advance: -4 },
-    { text: "Notebook code review found a PySpark anti-pattern.", advance: -2 },
-    { text: "Excel output formatting broke for the 4th time.", advance: -2 },
-  ],
-  [TILE_TYPES.BOSS]: [
-    { text: "PARTNER REVIEW: Present your findings to the engagement partner!", type: "boss", pass: "Partner signs off — outstanding work! Advance 4!", fail: "Partner has 12 review notes. Go back 3." },
-  ],
-};
-
-const PLAYERS = [
-  { name: "You", color: "#06d6a0", icon: "🧑‍💻" },
-  { name: "Rival Firm", color: "#e63946", icon: "🏢" },
-];
-
-function rollDie() {
-  return Math.floor(Math.random() * 6) + 1;
-}
+const font = "'IBM Plex Mono', 'Fira Code', 'Courier New', monospace";
+const bg = "#0a0e17";
+const panelBg = "#111827";
+const borderColor = "#1e3a5f";
 
 function getEvent(tileType) {
   const events = EVENTS[tileType];
@@ -108,272 +28,504 @@ function getEvent(tileType) {
   return events[Math.floor(Math.random() * events.length)];
 }
 
-// Board layout: snaking path
-function getTilePosition(index, cols, tileSize, gap) {
-  const row = Math.floor(index / cols);
-  const colRaw = index % cols;
-  const col = row % 2 === 0 ? colRaw : cols - 1 - colRaw;
-  return {
-    x: col * (tileSize + gap) + gap,
-    y: row * (tileSize + gap) + gap,
-  };
+function makePlayers() {
+  return PLAYERS.map((p) => ({ ...p, position: 0, hours: STARTING_HOURS }));
 }
 
-const DiceAnimation = ({ value, rolling }) => {
-  const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
-  return (
-    <div style={{
-      fontSize: 64,
-      lineHeight: 1,
-      transition: "transform 0.2s",
-      transform: rolling ? "rotate(360deg) scale(1.2)" : "rotate(0deg) scale(1)",
-      animation: rolling ? "diceShake 0.15s infinite" : "none",
-    }}>
-      {faces[value - 1]}
-    </div>
-  );
-};
-
 export default function App() {
-  const [gameState, setGameState] = useState("menu"); // menu, playing, event, gameover
-  const [players, setPlayers] = useState(PLAYERS.map(p => ({ ...p, position: 0, score: 0 })));
+  const [gameState, setGameState] = useState("menu"); // menu | playing | event | card | gameover
+  const [players, setPlayers] = useState(makePlayers());
   const [currentPlayer, setCurrentPlayer] = useState(0);
-  const [diceValue, setDiceValue] = useState(1);
-  const [rolling, setRolling] = useState(false);
-  const [currentEvent, setCurrentEvent] = useState(null);
-  const [eventPhase, setEventPhase] = useState(null); // "show", "resolve"
-  const [eventResult, setEventResult] = useState(null);
-  const [log, setLog] = useState([]);
-  const [winner, setWinner] = useState(null);
-  const logRef = useRef(null);
 
-  const COLS = 8;
-  const TILE_SIZE = 64;
-  const GAP = 6;
-  const BOARD_W = COLS * (TILE_SIZE + GAP) + GAP;
-  const ROWS = Math.ceil(BOARD_SIZE / COLS);
-  const BOARD_H = ROWS * (TILE_SIZE + GAP) + GAP;
+  // Dice
+  const [diceValues, setDiceValues] = useState([1]);
+  const [rolling, setRolling] = useState(false);
+  const [pendingRollChoice, setPendingRollChoice] = useState(null); // "safe" | "risky" | null
+
+  // Event modal
+  const [currentEvent, setCurrentEvent] = useState(null);
+  const [eventPhase, setEventPhase] = useState(null); // "show" | "choice" | "resolve"
+  const [eventResult, setEventResult] = useState(null);
+  const [eventChoice, setEventChoice] = useState(null); // stores "quick"/"deep"/"manual"/"automated"/90/95/99
+  const [rerollUsed, setRerollUsed] = useState(false);
+
+  // Card modal
+  const [currentCard, setCurrentCard] = useState(null);
+  const [cardDeck, setCardDeck] = useState(() => shuffleDeck(CARD_DECK));
+  const [discardPile, setDiscardPile] = useState([]);
+
+  // Board state
+  const [trailHistory, setTrailHistory] = useState(PLAYERS.map(() => []));
+  const [halfNextRoll, setHalfNextRoll] = useState(PLAYERS.map(() => false));
+  const [closingSprintUsed, setClosingSprintUsed] = useState(false);
+  const [closingSprintBonus, setClosingSprintBonus] = useState(null); // playerIdx | null
+
+  // Meta
+  const [winner, setWinner] = useState(null);
+  const [log, setLog] = useState([]);
+  const [gameSpeed, setGameSpeed] = useState("fast"); // "fast" | "normal"
+  const logRef = useRef(null);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
 
   const addLog = useCallback((msg) => {
-    setLog(prev => [...prev.slice(-30), msg]);
+    setLog((prev) => [...prev.slice(-40), msg]);
   }, []);
 
-  const movePlayer = useCallback((playerIdx, spaces) => {
-    setPlayers(prev => {
-      const next = [...prev];
-      let newPos = next[playerIdx].position + spaces;
-      if (newPos < 0) newPos = 0;
-      if (newPos >= BOARD_SIZE - 1) newPos = BOARD_SIZE - 1;
-      next[playerIdx] = { ...next[playerIdx], position: newPos };
-      return next;
-    });
+  // --- Movement ---
+  const movePlayer = useCallback((playerIdx, spaces, currentPlayers) => {
+    const next = [...currentPlayers];
+    let newPos = next[playerIdx].position + spaces;
+    if (newPos < 0) newPos = 0;
+    if (newPos >= BOARD_SIZE - 1) newPos = BOARD_SIZE - 1;
+    next[playerIdx] = { ...next[playerIdx], position: newPos };
+    return next;
   }, []);
 
-  const handleRoll = useCallback(() => {
-    if (rolling || gameState !== "playing") return;
+  const updateTrail = useCallback((playerIdx, oldPos, currentTrails) => {
+    const next = [...currentTrails];
+    next[playerIdx] = [oldPos, ...next[playerIdx]].slice(0, 3);
+    return next;
+  }, []);
+
+  // --- Hours management ---
+  const applyHours = useCallback((playerIdx, delta, currentPlayers) => {
+    const p = currentPlayers[playerIdx];
+    const newHours = applyHoursDelta(p.hours, delta);
+    const next = [...currentPlayers];
+    next[playerIdx] = { ...next[playerIdx], hours: newHours };
+    return next;
+  }, []);
+
+  // --- Win check ---
+  const checkWin = useCallback((playerIdx, pos) => {
+    return pos >= BOARD_FINISH;
+  }, []);
+
+  // --- Advance turn ---
+  const advanceTurn = useCallback((fromPlayerIdx) => {
+    const nextIdx = (fromPlayerIdx + 1) % PLAYERS.length;
+    setCurrentPlayer(nextIdx);
+    setPendingRollChoice(null);
+    if (nextIdx !== 0) {
+      // AI turn
+      setTimeout(() => triggerAITurn(nextIdx), gameSpeed === "fast" ? 300 : 800);
+    }
+  }, [gameSpeed]); // eslint-disable-line
+
+  // --- After event/card resolves, check hours triggers and advance turn ---
+  const afterTurnEffects = useCallback((playerIdx, updatedPlayers, updatedTrails, updatedHalfRolls) => {
+    let p = updatedPlayers[playerIdx];
+    let finalPlayers = [...updatedPlayers];
+
+    // Promotion check
+    if (checkPromotion(p.hours)) {
+      const oldPos = p.position;
+      finalPlayers = movePlayer(playerIdx, PROMOTION_ADVANCE, finalPlayers);
+      const updatedTrails2 = updateTrail(playerIdx, oldPos, updatedTrails);
+      setTrailHistory(updatedTrails2);
+      finalPlayers[playerIdx] = { ...finalPlayers[playerIdx], hours: PROMOTION_HOURS_RESET };
+      addLog(`🎉 ${p.name} hit ${p.hours} hours — Early Promotion! +${PROMOTION_ADVANCE} tiles, hours reset to ${PROMOTION_HOURS_RESET}`);
+      // Check win after promotion
+      if (checkWin(playerIdx, finalPlayers[playerIdx].position)) {
+        setPlayers(finalPlayers);
+        setWinner(playerIdx);
+        setGameState("gameover");
+        return;
+      }
+    }
+
+    // Burnout check
+    if (checkBurnout(finalPlayers[playerIdx].hours)) {
+      const oldPos = finalPlayers[playerIdx].position;
+      finalPlayers = movePlayer(playerIdx, BURNOUT_ADVANCE, finalPlayers);
+      const updatedTrails3 = updateTrail(playerIdx, oldPos, updatedTrails);
+      setTrailHistory(updatedTrails3);
+      finalPlayers[playerIdx] = { ...finalPlayers[playerIdx], hours: finalPlayers[playerIdx].hours + BURNOUT_HOURS_RESTORE };
+      addLog(`💀 ${p.name} burned out! Back ${Math.abs(BURNOUT_ADVANCE)} tiles, +${BURNOUT_HOURS_RESTORE} ⏱️`);
+    }
+
+    setPlayers(finalPlayers);
+    setHalfNextRoll(updatedHalfRolls);
+
+    // Closing sprint check
+    if (!closingSprintUsed) {
+      const sprintIdx = checkClosingSprint(
+        finalPlayers.map((pl) => ({ position: pl.position, hours: pl.hours })),
+        closingSprintUsed
+      );
+      if (sprintIdx !== null) {
+        setClosingSprintBonus(sprintIdx);
+        setClosingSprintUsed(true);
+        addLog(`🏁 ${finalPlayers[sprintIdx].name} qualifies for Closing Sprint bonus!`);
+      }
+    }
+
+    setGameState("playing");
+    advanceTurn(playerIdx);
+  }, [movePlayer, updateTrail, checkWin, addLog, closingSprintUsed, advanceTurn]);
+
+  // --- Handle roll execution ---
+  const executeRoll = useCallback((playerIdx, rollChoice, currentPlayers, currentTrails, currentHalfRolls) => {
     setRolling(true);
+    const diceCount = rollChoice === "risky" ? 2 : 1;
     let ticks = 0;
+    const speed = gameSpeed === "fast" ? 60 : 80;
+
     const interval = setInterval(() => {
-      setDiceValue(rollDie());
+      setDiceValues(rollDice(diceCount));
       ticks++;
-      if (ticks >= 10) {
+      const maxTicks = gameSpeed === "fast" ? 6 : 10;
+
+      if (ticks >= maxTicks) {
         clearInterval(interval);
-        const finalRoll = rollDie();
-        setDiceValue(finalRoll);
+        const finalDice = rollDice(diceCount);
+        setDiceValues(finalDice);
         setRolling(false);
 
-        const player = players[currentPlayer];
-        addLog(`${player.icon} ${player.name} rolled a ${finalRoll}`);
+        let totalMove = finalDice.reduce((a, b) => a + b, 0);
 
-        let newPos = player.position + finalRoll;
-        if (newPos >= BOARD_SIZE - 1) {
-          newPos = BOARD_SIZE - 1;
-          setPlayers(prev => {
-            const next = [...prev];
-            next[currentPlayer] = { ...next[currentPlayer], position: newPos };
-            return next;
-          });
-          setWinner(currentPlayer);
+        // Doubles bonus on risky roll
+        const doubles = rollChoice === "risky" && isDoubles(finalDice);
+        if (doubles) {
+          totalMove = totalMove * 2;
+          addLog(`🎲 DOUBLES! ${currentPlayers[playerIdx].name} moves ${totalMove} tiles!`);
+        }
+
+        // LOOP card half-roll debuff
+        const newHalfRolls = [...currentHalfRolls];
+        if (newHalfRolls[playerIdx]) {
+          totalMove = Math.floor(totalMove / 2);
+          newHalfRolls[playerIdx] = false;
+          addLog(`😩 LOOP debuff: ${currentPlayers[playerIdx].name}'s roll halved to ${totalMove}`);
+        }
+
+        // Closing sprint bonus
+        let bonusRoll = 0;
+        if (closingSprintBonus === playerIdx) {
+          const [bonus] = rollDice(1);
+          bonusRoll = bonus;
+          setClosingSprintBonus(null);
+          addLog(`🏁 Closing Sprint bonus: +${bonus} tiles!`);
+        }
+
+        totalMove += bonusRoll;
+
+        const p = currentPlayers[playerIdx];
+        addLog(`${p.icon} ${p.name} rolled ${finalDice.join("+")}${doubles ? " (doubles!)" : ""}${rollChoice === "risky" ? " [risky]" : ""} → moves ${totalMove}`);
+
+        const oldPos = p.position;
+        let newPos = oldPos + totalMove;
+        if (newPos >= BOARD_SIZE - 1) newPos = BOARD_SIZE - 1;
+
+        const updatedPlayers = [...currentPlayers];
+        updatedPlayers[playerIdx] = { ...updatedPlayers[playerIdx], position: newPos };
+        const updatedTrails = updateTrail(playerIdx, oldPos, currentTrails);
+        setTrailHistory(updatedTrails);
+
+        // Win?
+        if (newPos >= BOARD_FINISH) {
+          setPlayers(updatedPlayers);
+          setWinner(playerIdx);
           setGameState("gameover");
-          addLog(`🏆 ${player.name} reached Sign-Off! ENGAGEMENT COMPLETE!`);
+          addLog(`🏆 ${p.name} reached Sign-Off! ENGAGEMENT COMPLETE!`);
           return;
         }
 
-        setPlayers(prev => {
-          const next = [...prev];
-          next[currentPlayer] = { ...next[currentPlayer], position: newPos };
-          return next;
-        });
+        setPlayers(updatedPlayers);
 
+        // Tile event
         const tileType = BOARD_TILES[newPos];
-        const event = getEvent(tileType);
 
-        if (event) {
-          setTimeout(() => {
-            setCurrentEvent(event);
-            setEventPhase("show");
-            setGameState("event");
-          }, 400);
-        } else {
-          addLog(`${player.icon} landed on ${TILE_CONFIG[tileType]?.label || "a tile"}`);
-          setTimeout(() => {
-            if (currentPlayer === 0) {
-              // AI turn
-              setCurrentPlayer(1);
-              setTimeout(() => autoRoll(1), 800);
-            } else {
-              setCurrentPlayer(0);
-            }
-          }, 300);
-        }
-      }
-    }, 80);
-  }, [rolling, gameState, players, currentPlayer, addLog]);
-
-  const resolveEvent = useCallback((event, playerIdx) => {
-    const player = players[playerIdx];
-    if (event.type === "dice" || event.type === "boss") {
-      const roll = rollDie();
-      const success = event.type === "boss" ? roll >= 4 : roll >= 3;
-      const resultText = success ? (event.good || event.pass) : (event.bad || event.fail);
-      const match = resultText.match(/(advance|go back|skip ahead|jump forward)\s+(\d+)/i);
-      let spaces = 0;
-      if (match) {
-        spaces = parseInt(match[2]);
-        if (/go back/i.test(match[1])) spaces = -spaces;
-      }
-      setEventResult({ roll, success, text: resultText, spaces });
-      movePlayer(playerIdx, spaces);
-      addLog(`${player.icon} ${resultText}`);
-    } else if (event.advance) {
-      setEventResult({ text: event.text, spaces: event.advance, success: event.advance > 0 });
-      movePlayer(playerIdx, event.advance);
-      addLog(`${player.icon} ${event.advance > 0 ? "Advance" : "Go back"} ${Math.abs(event.advance)}!`);
-    }
-    setEventPhase("resolve");
-  }, [players, movePlayer, addLog]);
-
-  const dismissEvent = useCallback(() => {
-    setCurrentEvent(null);
-    setEventPhase(null);
-    setEventResult(null);
-    setGameState("playing");
-    if (currentPlayer === 0) {
-      setCurrentPlayer(1);
-      setTimeout(() => autoRoll(1), 800);
-    } else {
-      setCurrentPlayer(0);
-    }
-  }, [currentPlayer]);
-
-  const autoRoll = useCallback((playerIdx) => {
-    if (gameState === "gameover") return;
-    setRolling(true);
-    let ticks = 0;
-    const interval = setInterval(() => {
-      setDiceValue(rollDie());
-      ticks++;
-      if (ticks >= 8) {
-        clearInterval(interval);
-        const finalRoll = rollDie();
-        setDiceValue(finalRoll);
-        setRolling(false);
-
-        const player = players[playerIdx] || PLAYERS[playerIdx];
-        addLog(`${player.icon} ${player.name} rolled a ${finalRoll}`);
-
-        setPlayers(prev => {
-          const next = [...prev];
-          let newPos = next[playerIdx].position + finalRoll;
-          if (newPos >= BOARD_SIZE - 1) {
-            newPos = BOARD_SIZE - 1;
-            next[playerIdx] = { ...next[playerIdx], position: newPos };
+        if (tileType === TILE_TYPES.INBOX) {
+          // Draw a card
+          const { card, remaining, newDiscard } = drawCard(cardDeck, discardPile);
+          setCardDeck(remaining);
+          if (card.nuclear) setDiscardPile([...newDiscard, card]);
+          else setDiscardPile([...newDiscard, card]);
+          if (card) {
             setTimeout(() => {
-              setWinner(playerIdx);
-              setGameState("gameover");
-              addLog(`🏆 ${player.name} reached Sign-Off!`);
-            }, 200);
-            return next;
+              setCurrentCard(card);
+              setGameState("card");
+            }, 300);
+          } else {
+            afterTurnEffects(playerIdx, updatedPlayers, updatedTrails, newHalfRolls);
           }
-          next[playerIdx] = { ...next[playerIdx], position: newPos };
+          return;
+        }
 
-          const tileType = BOARD_TILES[newPos];
-          const event = getEvent(tileType);
-          if (event) {
+        const event = getEvent(tileType);
+        if (event) {
+          const needsChoice = ["risk_choice", "recon_choice", "sampling_choice"].includes(event.type);
+          const isAI = !PLAYERS[playerIdx].isHuman;
+
+          if (isAI && needsChoice) {
+            // AI auto-picks choice based on strategy
+            const strategy = PLAYERS[playerIdx].strategy;
+            let choiceType = null;
+            if (event.type === "risk_choice") choiceType = "risk";
+            else if (event.type === "recon_choice") choiceType = "recon";
+            else if (event.type === "sampling_choice") choiceType = "sampling";
+            const aiChoice = resolveAITileChoice(strategy, choiceType);
+
+            if (gameSpeed === "fast") {
+              addLog(`${updatedPlayers[playerIdx].icon} ${updatedPlayers[playerIdx].name} chose ${aiChoice} [AI]`);
+            }
+
             setTimeout(() => {
               setCurrentEvent(event);
               setEventPhase("show");
+              setEventChoice(aiChoice);
+              setRerollUsed(false);
               setGameState("event");
-            }, 400);
+            }, gameSpeed === "fast" ? 100 : 400);
           } else {
-            addLog(`${player.icon} landed on ${TILE_CONFIG[tileType]?.label || "a tile"}`);
-            setTimeout(() => setCurrentPlayer(0), 400);
+            setTimeout(() => {
+              setCurrentEvent(event);
+              setEventPhase(needsChoice ? "choice" : "show");
+              setRerollUsed(false);
+              setEventChoice(null);
+              setGameState("event");
+            }, 300);
           }
-          return next;
-        });
+        } else {
+          addLog(`${p.icon} landed on ${TILE_CONFIG[tileType]?.label || "a tile"}`);
+          afterTurnEffects(playerIdx, updatedPlayers, updatedTrails, newHalfRolls);
+        }
       }
-    }, 80);
-  }, [gameState, players, addLog]);
+    }, speed);
+  }, [gameSpeed, addLog, updateTrail, cardDeck, discardPile, closingSprintBonus, afterTurnEffects]);
 
-  const startGame = () => {
-    setPlayers(PLAYERS.map(p => ({ ...p, position: 0, score: 0 })));
-    setCurrentPlayer(0);
-    setDiceValue(1);
-    setLog(["🏁 Engagement kicked off! Roll to begin your analytics procedures."]);
-    setWinner(null);
+  // --- Human roll ---
+  const handleRollChoice = useCallback((choice) => {
+    setPendingRollChoice(choice);
+  }, []);
+
+  const handleRoll = useCallback(() => {
+    if (rolling || gameState !== "playing" || currentPlayer !== 0) return;
+    executeRoll(0, pendingRollChoice, players, trailHistory, halfNextRoll);
+    setPendingRollChoice(null);
+  }, [rolling, gameState, currentPlayer, pendingRollChoice, players, trailHistory, halfNextRoll, executeRoll]);
+
+  // --- AI turn ---
+  const triggerAITurn = useCallback((playerIdx) => {
+    if (gameState === "gameover") return;
+    const p = players[playerIdx];
+    const strategy = p.strategy;
+    const humanPos = players[0].position;
+    const rollChoice = resolveAIRollChoice(strategy, { position: p.position, humanPosition: humanPos });
+
+    if (gameSpeed === "fast") {
+      addLog(`${p.icon} ${p.name} — ${rollChoice} roll [${strategy}]`);
+    }
+
+    executeRoll(playerIdx, rollChoice, players, trailHistory, halfNextRoll);
+  }, [gameState, players, trailHistory, halfNextRoll, gameSpeed, addLog, executeRoll]);
+
+  // --- Event resolution ---
+  const resolveEventWithChoice = useCallback((choice) => {
+    setEventChoice(choice);
+    setEventPhase("show");
+  }, []);
+
+  const handleRollForEvent = useCallback(() => {
+    if (!currentEvent) return;
+    const p = players[currentPlayer];
+
+    if (currentEvent.advance != null) {
+      // Auto-resolve (insight/shortcut/setback/materiality)
+      const spaces = currentEvent.advance;
+      setEventResult({ text: currentEvent.text, spaces, success: spaces > 0 });
+      setEventPhase("resolve");
+      setPlayers((prev) => {
+        const next = movePlayer(currentPlayer, spaces, prev);
+        return next;
+      });
+      addLog(`${p.icon} ${spaces > 0 ? "+" + spaces : spaces} tiles`);
+      return;
+    }
+
+    if (currentEvent.type === "sampling_choice") {
+      const conf = eventChoice;
+      const outcome = SAMPLING_OUTCOMES[conf];
+      if (outcome.guaranteed) {
+        const { spaces } = outcome.guaranteed;
+        setEventResult({ text: `${conf}% confidence — ${spaces > 0 ? "+" + spaces : spaces} tiles.`, spaces, success: true });
+        setEventPhase("resolve");
+        setPlayers((prev) => movePlayer(currentPlayer, spaces, prev));
+        addLog(`${p.icon} ${conf}% sampling → +${spaces} tiles`);
+        return;
+      }
+      const [roll] = rollDice(1);
+      const { spaces, success } = outcome.roll(roll);
+      setEventResult({ roll, text: `${conf}% confidence. Rolled ${roll} → ${spaces > 0 ? "+" + spaces : spaces} tiles.`, spaces, success });
+      setEventPhase("resolve");
+      setPlayers((prev) => movePlayer(currentPlayer, spaces, prev));
+      addLog(`${p.icon} ${conf}% sampling, rolled ${roll} → ${spaces > 0 ? "+" + spaces : spaces} tiles`);
+      return;
+    }
+
+    // risk_choice or recon_choice or dice or boss
+    const [roll] = rollDice(1);
+    let passThreshold, goodText, badText, stakes;
+
+    if (currentEvent.type === "risk_choice") {
+      passThreshold = eventChoice === "deep" ? 4 : 3;
+      stakes = eventChoice === "deep" ? 4 : 2;
+      goodText = eventChoice === "deep" ? currentEvent.deepGood : currentEvent.quickGood;
+      badText = eventChoice === "deep" ? currentEvent.deepBad : currentEvent.quickBad;
+    } else if (currentEvent.type === "recon_choice") {
+      passThreshold = eventChoice === "automated" ? 4 : 3;
+      stakes = eventChoice === "automated" ? 4 : 2;
+      goodText = eventChoice === "automated" ? currentEvent.autoGood : currentEvent.manualGood;
+      badText = eventChoice === "automated" ? currentEvent.autoBad : currentEvent.manualBad;
+    } else if (currentEvent.type === "boss") {
+      passThreshold = 4;
+      goodText = currentEvent.pass;
+      badText = currentEvent.fail;
+    } else {
+      // dice
+      passThreshold = 3;
+      goodText = currentEvent.good;
+      badText = currentEvent.bad;
+    }
+
+    const success = roll >= passThreshold;
+    const resultText = success ? goodText : badText;
+    const match = resultText?.match(/(advance|go back|skip ahead|jump forward)\s+(\d+)/i);
+    let spaces = 0;
+    if (match) {
+      spaces = parseInt(match[2]);
+      if (/go back/i.test(match[1])) spaces = -spaces;
+    }
+    if (!spaces && stakes) spaces = success ? stakes : -stakes;
+
+    setEventResult({ roll, success, text: resultText, spaces });
+    setEventPhase("resolve");
+    setPlayers((prev) => movePlayer(currentPlayer, spaces, prev));
+    addLog(`${p.icon} rolled ${roll} — ${success ? "passed" : "failed"} → ${spaces > 0 ? "+" + spaces : spaces} tiles`);
+  }, [currentEvent, eventChoice, currentPlayer, players, movePlayer, addLog]);
+
+  const handleSpendHours = useCallback(() => {
+    if (rerollUsed) return;
+    setRerollUsed(true);
+    setPlayers((prev) => {
+      const next = [...prev];
+      next[currentPlayer] = { ...next[currentPlayer], hours: Math.max(0, next[currentPlayer].hours - 3) };
+      return next;
+    });
+    setEventResult(null);
+    setEventPhase(currentEvent.type && ["risk_choice","recon_choice","sampling_choice"].includes(currentEvent.type) ? "choice" : "show");
+    addLog(`${players[currentPlayer].icon} spent 3 ⏱️ to re-roll`);
+  }, [rerollUsed, currentPlayer, players, currentEvent, addLog]);
+
+  const handleDismissEvent = useCallback(() => {
+    const updatedPlayers = [...players];
+    const updatedHalfRolls = [...halfNextRoll];
     setCurrentEvent(null);
     setEventPhase(null);
     setEventResult(null);
+    setEventChoice(null);
+    afterTurnEffects(currentPlayer, updatedPlayers, trailHistory, updatedHalfRolls);
+  }, [currentPlayer, players, trailHistory, halfNextRoll, afterTurnEffects]);
+
+  // --- Card resolution ---
+  const handleDismissCard = useCallback(() => {
+    const card = currentCard;
+    if (!card) return;
+
+    let updatedPlayers = [...players];
+    const p = updatedPlayers[currentPlayer];
+
+    // Apply hours delta
+    if (card.hoursDelta !== 0 || card.hoursDelta === "LOSE_ALL") {
+      updatedPlayers = applyHours(currentPlayer, card.hoursDelta, updatedPlayers);
+    }
+
+    // Apply tile delta
+    let updatedTrails = [...trailHistory];
+    const oldPos = p.position;
+
+    if (card.tileDelta === "RETURN_TO_START") {
+      updatedPlayers[currentPlayer] = { ...updatedPlayers[currentPlayer], position: 0 };
+      updatedTrails = updateTrail(currentPlayer, oldPos, updatedTrails);
+      addLog(`☠️ ${p.name} sent back to Start!`);
+    } else if (card.tileDelta !== 0) {
+      updatedPlayers = movePlayer(currentPlayer, card.tileDelta, updatedPlayers);
+      updatedTrails = updateTrail(currentPlayer, oldPos, updatedTrails);
+    }
+
+    // LOOP half-roll debuff
+    const updatedHalfRolls = [...halfNextRoll];
+    if (card.halfNextRoll) {
+      updatedHalfRolls[currentPlayer] = true;
+      addLog(`😩 ${p.name}'s next roll will be halved`);
+    }
+
+    addLog(`${p.icon} Drew: ${card.title}`);
+    setCurrentCard(null);
+    setGameState("playing");
+    afterTurnEffects(currentPlayer, updatedPlayers, updatedTrails, updatedHalfRolls);
+  }, [currentCard, currentPlayer, players, trailHistory, halfNextRoll, applyHours, movePlayer, updateTrail, addLog, afterTurnEffects]);
+
+  // --- Game start ---
+  const startGame = () => {
+    setPlayers(makePlayers());
+    setCurrentPlayer(0);
+    setDiceValues([1]);
+    setPendingRollChoice(null);
+    setRolling(false);
+    setCurrentEvent(null);
+    setEventPhase(null);
+    setEventResult(null);
+    setEventChoice(null);
+    setRerollUsed(false);
+    setCurrentCard(null);
+    setCardDeck(shuffleDeck(CARD_DECK));
+    setDiscardPile([]);
+    setTrailHistory(PLAYERS.map(() => []));
+    setHalfNextRoll(PLAYERS.map(() => false));
+    setClosingSprintUsed(false);
+    setClosingSprintBonus(null);
+    setWinner(null);
+    setLog(["🏁 Engagement kicked off! Choose Safe or Risky roll to begin."]);
     setGameState("playing");
   };
 
-  // --- RENDER ---
-  const font = "'IBM Plex Mono', 'Fira Code', 'Courier New', monospace";
-  const bg = "#0a0e17";
-  const panelBg = "#111827";
-  const borderColor = "#1e3a5f";
+  const rivalTurnMessage = currentPlayer !== 0 && gameState === "playing"
+    ? `${players[currentPlayer]?.icon} ${players[currentPlayer]?.name} is thinking...`
+    : null;
 
+  // --- RENDER ---
   return (
     <div style={{
       fontFamily: font,
       background: `radial-gradient(ellipse at 30% 20%, #0d1b2a 0%, ${bg} 70%)`,
-      color: "#e0e7ef",
-      minHeight: "100vh",
-      padding: "16px",
-      boxSizing: "border-box",
+      color: "#e0e7ef", minHeight: "100vh", padding: "16px", boxSizing: "border-box",
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Orbitron:wght@700;900&display=swap');
         @keyframes diceShake {
-          0% { transform: rotate(0deg) scale(1.1); }
-          25% { transform: rotate(-15deg) scale(1.15); }
-          50% { transform: rotate(15deg) scale(1.1); }
-          75% { transform: rotate(-10deg) scale(1.15); }
+          0%   { transform: rotate(0deg) scale(1.1); }
+          25%  { transform: rotate(-15deg) scale(1.15); }
+          50%  { transform: rotate(15deg) scale(1.1); }
+          75%  { transform: rotate(-10deg) scale(1.15); }
           100% { transform: rotate(0deg) scale(1.1); }
         }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes glowBorder {
-          0%,100% { box-shadow: 0 0 8px #06d6a044; }
-          50% { box-shadow: 0 0 20px #06d6a088; }
-        }
+        @keyframes glowBorder { 0%,100% { box-shadow: 0 0 8px #06d6a044; } 50% { box-shadow: 0 0 20px #06d6a088; } }
       `}</style>
 
       {/* TITLE */}
       <div style={{ textAlign: "center", marginBottom: 12 }}>
         <h1 style={{
-          fontFamily: "'Orbitron', sans-serif",
-          fontSize: "clamp(18px, 3.5vw, 28px)",
-          fontWeight: 900,
-          letterSpacing: 3,
-          margin: 0,
+          fontFamily: "'Orbitron', sans-serif", fontSize: "clamp(18px, 3.5vw, 28px)",
+          fontWeight: 900, letterSpacing: 3, margin: 0,
           background: "linear-gradient(135deg, #06d6a0, #457b9d, #e9c46a)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
           textTransform: "uppercase",
         }}>
           Audit Analytics: The Board Game
@@ -384,175 +536,95 @@ export default function App() {
       </div>
 
       {gameState === "menu" ? (
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", gap: 24, marginTop: 40,
-        }}>
-          <div style={{
-            background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 12,
-            padding: "32px 40px", maxWidth: 440, textAlign: "center",
-          }}>
+        /* MENU */
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, marginTop: 40 }}>
+          <div style={{ background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 12, padding: "32px 40px", maxWidth: 480, textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>📊</div>
-            <h2 style={{ fontFamily: "'Orbitron'", fontSize: 18, color: "#06d6a0", margin: "0 0 16px" }}>
-              How to Play
-            </h2>
+            <h2 style={{ fontFamily: "'Orbitron'", fontSize: 18, color: "#06d6a0", margin: "0 0 16px" }}>How to Play</h2>
             <div style={{ fontSize: 13, lineHeight: 1.8, color: "#9ab0c6", textAlign: "left" }}>
-              <p style={{ margin: "0 0 8px" }}>Roll the dice and navigate 40 tiles from <strong style={{ color: "#06d6a0" }}>Engagement Kick-Off</strong> to <strong style={{ color: "#ffd700" }}>Partner Sign-Off</strong>.</p>
-              <p style={{ margin: "0 0 8px" }}>Land on special tiles to face audit challenges — risk events, reconciliation checks, sampling tests, data quality gates, and partner reviews.</p>
-              <p style={{ margin: "0 0 8px" }}>Roll high to pass challenges and advance. Roll low and you'll face setbacks. Automation shortcuts and insight bonuses help you leap ahead!</p>
-              <p style={{ margin: 0 }}>Race against the <strong style={{ color: "#e63946" }}>Rival Firm</strong> to complete the engagement first.</p>
+              <p style={{ margin: "0 0 8px" }}>Race 40 tiles from <strong style={{ color: "#06d6a0" }}>Kick-Off</strong> to <strong style={{ color: "#ffd700" }}>Partner Sign-Off</strong> — against <strong style={{ color: "#86bc25" }}>Deloitted</strong>, <strong style={{ color: "#d9534f" }}>PwSee</strong>, <strong style={{ color: "#ffe600" }}>Ernst & Younger</strong>, and <strong style={{ color: "#0091da" }}>KPMZ</strong>.</p>
+              <p style={{ margin: "0 0 8px" }}>Each turn: choose <strong>Safe Roll (1d6)</strong> or <strong>Risky Roll (2d6)</strong> — doubles on risky = move double!</p>
+              <p style={{ margin: "0 0 8px" }}>Land on special tiles to make decisions. Earn <strong style={{ color: "#e9c46a" }}>⏱️ Billable Hours</strong> — hit 25 for an early promotion (+4 tiles), hit 0 for burnout (−4 tiles).</p>
+              <p style={{ margin: 0 }}>📬 <strong>Inbox tiles</strong> draw from the <em>Busy Season Chronicles</em> deck. Pray it's not the PCAOB card.</p>
             </div>
             <button onClick={startGame} style={{
               marginTop: 24, padding: "14px 48px", fontSize: 15, fontWeight: 700,
               fontFamily: "'Orbitron'", background: "linear-gradient(135deg, #06d6a0, #2d6a4f)",
               color: "#0a0e17", border: "none", borderRadius: 8, cursor: "pointer",
               letterSpacing: 2, textTransform: "uppercase",
-              transition: "transform 0.15s, box-shadow 0.15s",
             }}
-            onMouseOver={e => { e.target.style.transform = "scale(1.05)"; e.target.style.boxShadow = "0 0 24px #06d6a066"; }}
-            onMouseOut={e => { e.target.style.transform = "scale(1)"; e.target.style.boxShadow = "none"; }}
+            onMouseOver={(e) => { e.target.style.transform = "scale(1.05)"; e.target.style.boxShadow = "0 0 24px #06d6a066"; }}
+            onMouseOut={(e) => { e.target.style.transform = "scale(1)"; e.target.style.boxShadow = "none"; }}
             >
               Start Engagement
             </button>
           </div>
         </div>
       ) : (
+        /* GAME */
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
-          {/* BOARD */}
-          <div style={{
-            background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10,
-            padding: 10, position: "relative", flexShrink: 0,
-            width: BOARD_W + 20, minHeight: BOARD_H + 20,
-          }}>
-            <div style={{ position: "relative", width: BOARD_W, height: BOARD_H }}>
-              {BOARD_TILES.map((tileType, i) => {
-                const pos = getTilePosition(i, COLS, TILE_SIZE, GAP);
-                const cfg = TILE_CONFIG[tileType];
-                const playersHere = players.filter(p => p.position === i);
-                return (
-                  <div key={i} style={{
-                    position: "absolute", left: pos.x, top: pos.y,
-                    width: TILE_SIZE, height: TILE_SIZE,
-                    background: `${cfg.color}22`,
-                    border: `2px solid ${cfg.color}66`,
-                    borderRadius: 6,
-                    display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center",
-                    fontSize: 10, color: cfg.color,
-                    transition: "all 0.3s",
-                    boxShadow: playersHere.length > 0 ? `0 0 12px ${playersHere[0].color}88` : "none",
-                  }}>
-                    <span style={{ fontSize: 20, lineHeight: 1 }}>{cfg.emoji}</span>
-                    <span style={{ fontSize: 8, marginTop: 2, opacity: 0.8, textAlign: "center", lineHeight: 1.1 }}>
-                      {i === 0 ? "START" : i === BOARD_SIZE - 1 ? "FINISH" : cfg.label}
-                    </span>
-                    <span style={{ fontSize: 7, opacity: 0.4 }}>{i}</span>
-                    {/* Player tokens */}
-                    <div style={{ position: "absolute", bottom: -2, display: "flex", gap: 2 }}>
-                      {playersHere.map((p, pi) => (
-                        <span key={pi} style={{
-                          fontSize: 16,
-                          filter: "drop-shadow(0 0 4px " + p.color + ")",
-                          animation: p.name === players[currentPlayer]?.name && gameState === "playing" ? "pulse 1s infinite" : "none",
-                        }}>{p.icon}</span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <GameBoard
+            players={players}
+            currentPlayer={currentPlayer}
+            gameState={gameState}
+            trailHistory={trailHistory}
+          />
 
-          {/* SIDE PANEL */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: 260, minWidth: 220 }}>
-            {/* Players */}
-            <div style={{
-              background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10, padding: 12,
-            }}>
-              {players.map((p, i) => (
-                <div key={i} style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "6px 8px",
-                  borderRadius: 6, marginBottom: i < players.length - 1 ? 6 : 0,
-                  background: currentPlayer === i && gameState === "playing" ? `${p.color}18` : "transparent",
-                  border: currentPlayer === i && gameState === "playing" ? `1px solid ${p.color}44` : "1px solid transparent",
-                  animation: currentPlayer === i && gameState === "playing" ? "glowBorder 2s infinite" : "none",
-                }}>
-                  <span style={{ fontSize: 22 }}>{p.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: p.color }}>{p.name}</div>
-                    <div style={{ fontSize: 10, color: "#6b7f99" }}>Tile {p.position} / {BOARD_SIZE - 1}</div>
-                  </div>
-                  <div style={{
-                    width: 50, height: 6, background: "#1a2332", borderRadius: 3, overflow: "hidden",
-                  }}>
-                    <div style={{
-                      width: `${(p.position / (BOARD_SIZE - 1)) * 100}%`,
-                      height: "100%", background: p.color, borderRadius: 3,
-                      transition: "width 0.5s ease",
-                    }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, width: 270, minWidth: 240 }}>
+            <PlayerPanel
+              players={players}
+              currentPlayer={currentPlayer}
+              gameState={gameState}
+              gameSpeed={gameSpeed}
+              onToggleSpeed={() => setGameSpeed((s) => s === "fast" ? "normal" : "fast")}
+            />
 
-            {/* Dice + Controls */}
-            <div style={{
-              background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10,
-              padding: 16, display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-            }}>
-              <DiceAnimation value={diceValue} rolling={rolling} />
-              {gameState === "playing" && currentPlayer === 0 && (
-                <button onClick={handleRoll} disabled={rolling} style={{
-                  padding: "10px 32px", fontSize: 13, fontWeight: 700,
-                  fontFamily: "'Orbitron'", letterSpacing: 1,
-                  background: rolling ? "#333" : "linear-gradient(135deg, #06d6a0, #2d6a4f)",
-                  color: rolling ? "#666" : "#0a0e17",
-                  border: "none", borderRadius: 6, cursor: rolling ? "not-allowed" : "pointer",
-                  textTransform: "uppercase", transition: "all 0.15s",
-                }}
-                onMouseOver={e => { if (!rolling) e.target.style.transform = "scale(1.05)"; }}
-                onMouseOut={e => { e.target.style.transform = "scale(1)"; }}
-                >
-                  {rolling ? "Rolling..." : "Roll Dice"}
-                </button>
-              )}
-              {gameState === "playing" && currentPlayer === 1 && (
-                <div style={{ fontSize: 11, color: "#e63946", animation: "pulse 0.8s infinite" }}>
-                  Rival Firm is rolling...
+            <DiceControl
+              diceValues={diceValues}
+              rolling={rolling}
+              gameState={gameState}
+              currentPlayerIsHuman={currentPlayer === 0}
+              pendingRollChoice={pendingRollChoice}
+              onRollChoice={handleRollChoice}
+              onRoll={handleRoll}
+              rivalTurnMessage={rivalTurnMessage}
+            />
+
+            {/* Game over panel */}
+            {gameState === "gameover" && (
+              <div style={{ background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: winner === 0 ? "#06d6a0" : "#e63946", marginBottom: 8 }}>
+                  {winner === 0 ? "🎉 Engagement Complete! You won!" : `${players[winner]?.icon} ${players[winner]?.name} beat you to Sign-Off!`}
                 </div>
-              )}
-              {gameState === "gameover" && (
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: winner === 0 ? "#06d6a0" : "#e63946", marginBottom: 8 }}>
-                    {winner === 0 ? "You Won! Engagement Complete! 🎉" : "Rival Firm beat you to Sign-Off! 😤"}
-                  </div>
-                  <button onClick={startGame} style={{
-                    padding: "8px 24px", fontSize: 12, fontWeight: 700, fontFamily: font,
-                    background: "#1e3a5f", color: "#e0e7ef", border: "1px solid #457b9d",
-                    borderRadius: 6, cursor: "pointer",
-                  }}>
-                    New Engagement
-                  </button>
+                <div style={{ fontSize: 11, color: "#6b7f99", marginBottom: 12 }}>
+                  {players.map((p, i) => (
+                    <div key={i} style={{ color: p.color }}>{p.icon} {p.name}: {p.hours} ⏱️</div>
+                  ))}
                 </div>
-              )}
-            </div>
+                <button onClick={startGame} style={{
+                  padding: "8px 24px", fontSize: 12, fontWeight: 700, fontFamily: font,
+                  background: "#1e3a5f", color: "#e0e7ef", border: "1px solid #457b9d",
+                  borderRadius: 6, cursor: "pointer",
+                }}>New Engagement</button>
+              </div>
+            )}
 
             {/* Tile Legend */}
-            <div style={{
-              background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10, padding: 10,
-            }}>
+            <div style={{ background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10, padding: 10 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7f99", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Legend</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {Object.entries(TILE_CONFIG).filter(([k]) => k !== TILE_TYPES.NORMAL).map(([key, cfg]) => (
-                  <div key={key} style={{
-                    display: "flex", alignItems: "center", gap: 3,
-                    fontSize: 9, color: cfg.color, padding: "2px 5px",
-                    background: `${cfg.color}11`, borderRadius: 3,
-                  }}>
-                    <span style={{ fontSize: 12 }}>{cfg.emoji}</span>
-                    {cfg.label}
-                  </div>
-                ))}
+                {Object.entries(TILE_CONFIG)
+                  .filter(([k]) => k !== TILE_TYPES.NORMAL)
+                  .map(([key, cfg]) => (
+                    <div key={key} style={{
+                      display: "flex", alignItems: "center", gap: 3,
+                      fontSize: 9, color: cfg.color, padding: "2px 5px",
+                      background: `${cfg.color}11`, borderRadius: 3,
+                    }}>
+                      <span style={{ fontSize: 12 }}>{cfg.emoji}</span>
+                      {cfg.label}
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -561,7 +633,9 @@ export default function App() {
               background: panelBg, border: `1px solid ${borderColor}`, borderRadius: 10,
               padding: 10, maxHeight: 160, overflowY: "auto", flex: 1,
             }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7f99", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Engagement Log</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#6b7f99", marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>
+                Engagement Log
+              </div>
               {log.map((msg, i) => (
                 <div key={i} style={{ fontSize: 10, color: "#9ab0c6", padding: "2px 0", borderBottom: "1px solid #1a2332", lineHeight: 1.5 }}>
                   {msg}
@@ -572,104 +646,31 @@ export default function App() {
         </div>
       )}
 
-      {/* EVENT MODAL */}
+      {/* Modals */}
       {gameState === "event" && currentEvent && (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
-          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
-          padding: 16,
-        }}
-        onClick={e => { if (e.target === e.currentTarget && eventPhase === "resolve") dismissEvent(); }}
-        >
-          <div style={{
-            background: "#111827", border: "1px solid #1e3a5f", borderRadius: 12,
-            padding: "28px 32px", maxWidth: 400, width: "100%",
-            animation: "slideUp 0.3s ease",
-            boxShadow: "0 0 60px rgba(6, 214, 160, 0.15)",
-          }}>
-            {eventPhase === "show" && (
-              <>
-                <div style={{ fontSize: 32, textAlign: "center", marginBottom: 8 }}>
-                  {TILE_CONFIG[BOARD_TILES[players[currentPlayer].position]]?.emoji || "📋"}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#e0e7ef", textAlign: "center", marginBottom: 6 }}>
-                  {TILE_CONFIG[BOARD_TILES[players[currentPlayer].position]]?.label}
-                </div>
-                <div style={{ fontSize: 13, color: "#9ab0c6", textAlign: "center", marginBottom: 20, lineHeight: 1.6 }}>
-                  {currentEvent.text}
-                </div>
-                {(currentEvent.type === "dice" || currentEvent.type === "boss") ? (
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 10, color: "#6b7f99", marginBottom: 8 }}>
-                      {currentEvent.type === "boss" ? "Roll 4+ to pass the review" : "Roll 3+ to succeed"}
-                    </div>
-                    <button onClick={() => resolveEvent(currentEvent, currentPlayer)} style={{
-                      padding: "10px 32px", fontSize: 13, fontWeight: 700, fontFamily: "'Orbitron'",
-                      background: "linear-gradient(135deg, #e9c46a, #f4a261)",
-                      color: "#0a0e17", border: "none", borderRadius: 6, cursor: "pointer",
-                      letterSpacing: 1, textTransform: "uppercase",
-                    }}>
-                      Roll for it!
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{
-                      fontSize: 24, fontWeight: 700,
-                      color: currentEvent.advance > 0 ? "#06d6a0" : "#e63946",
-                      marginBottom: 12,
-                    }}>
-                      {currentEvent.advance > 0 ? `+${currentEvent.advance} Tiles!` : `${currentEvent.advance} Tiles`}
-                    </div>
-                    <button onClick={() => { resolveEvent(currentEvent, currentPlayer); }} style={{
-                      padding: "8px 28px", fontSize: 12, fontWeight: 600, fontFamily: font,
-                      background: "#1e3a5f", color: "#e0e7ef", border: "1px solid #457b9d",
-                      borderRadius: 6, cursor: "pointer",
-                    }}>
-                      Continue
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-            {eventPhase === "resolve" && eventResult && (
-              <>
-                <div style={{ textAlign: "center", marginBottom: 12 }}>
-                  {eventResult.roll && (
-                    <div style={{ fontSize: 48, marginBottom: 8 }}>
-                      {["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][eventResult.roll - 1]}
-                    </div>
-                  )}
-                  <div style={{
-                    fontSize: 16, fontWeight: 700,
-                    color: eventResult.success ? "#06d6a0" : "#e63946",
-                    marginBottom: 8,
-                  }}>
-                    {eventResult.success ? "SUCCESS!" : "SETBACK!"}
-                  </div>
-                  <div style={{ fontSize: 13, color: "#9ab0c6", lineHeight: 1.6, marginBottom: 16 }}>
-                    {eventResult.text}
-                  </div>
-                  <div style={{
-                    fontSize: 18, fontWeight: 700,
-                    color: eventResult.spaces >= 0 ? "#06d6a0" : "#e63946",
-                  }}>
-                    {eventResult.spaces >= 0 ? `+${eventResult.spaces}` : eventResult.spaces} tiles
-                  </div>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <button onClick={dismissEvent} style={{
-                    padding: "10px 32px", fontSize: 12, fontWeight: 600, fontFamily: font,
-                    background: "#1e3a5f", color: "#e0e7ef", border: "1px solid #457b9d",
-                    borderRadius: 6, cursor: "pointer",
-                  }}>
-                    Continue
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <EventModal
+          currentEvent={currentEvent}
+          eventPhase={eventPhase}
+          eventResult={eventResult}
+          currentPlayerIdx={currentPlayer}
+          players={players}
+          playerHours={players[currentPlayer]?.hours ?? 0}
+          onRiskChoice={resolveEventWithChoice}
+          onReconChoice={resolveEventWithChoice}
+          onSamplingChoice={resolveEventWithChoice}
+          onRollForEvent={handleRollForEvent}
+          onDismiss={handleDismissEvent}
+          onSpendHours={handleSpendHours}
+          canSpendHours={!rerollUsed && (players[currentPlayer]?.hours ?? 0) >= 3}
+        />
+      )}
+
+      {gameState === "card" && currentCard && (
+        <CardDrawModal
+          card={currentCard}
+          onDismiss={handleDismissCard}
+          playerName={players[currentPlayer]?.name}
+        />
       )}
     </div>
   );
