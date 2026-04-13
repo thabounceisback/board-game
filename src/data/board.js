@@ -28,7 +28,7 @@ export const TILE_CONFIG = {
   [TILE_TYPES.BOSS]:         { emoji: "👔", color: "#1d3557",  label: "Partner Review" },
   [TILE_TYPES.FINISH]:       { emoji: "🏆", color: "#ffd700",  label: "Sign-Off" },
   [TILE_TYPES.NORMAL]:       { emoji: "📋", color: "#6c757d",  label: "Workpaper" },
-  [TILE_TYPES.INBOX]:        { emoji: "📬", color: "#f4a261",  label: "Inbox" },
+  [TILE_TYPES.INBOX]:        { emoji: "📬", color: "#4895ef",  label: "Inbox" },
 };
 
 // 40 tiles (indices 0–39). Inbox placed at tiles 5,11,17,23,29,34.

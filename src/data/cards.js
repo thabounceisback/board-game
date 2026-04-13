@@ -1,4 +1,13 @@
 // src/data/cards.js
+
+// Card fields:
+// type: "bad" | "good" | "chaos" | "nuclear"
+// tileDelta: number (positive = advance, negative = go back, 0 = no movement)
+//            OR "RETURN_TO_START" (send player to tile 0)
+// hoursDelta: number OR "LOSE_ALL" (set hours to 0)
+// halfNextRoll: boolean (optional) — LOOP card debuff: next movement roll halved
+// nuclear: boolean (optional) — removed from deck permanently after firing once
+
 export const CARD_DECK = [
   { id: 1,  title: '"pls fix"',                  emoji: "😐", flavor: "Partner leaves a single two-word review comment. No context. No explanation. It is 11:47pm.",                                                                      tileDelta: -2, hoursDelta: -2, type: "bad" },
   { id: 2,  title: "SALY Approved",               emoji: "🙏", flavor: '"Same as last year." Your prior year workpaper gets signed off without a single question. The system works.',                                                          tileDelta:  2, hoursDelta:  3, type: "good" },

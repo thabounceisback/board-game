@@ -1,8 +1,14 @@
 // src/data/players.js
 
+// Strategy names: "aggressive" | "overconfident" | "chaotic" | "conservative"
+// Roll choice: "safe" | "risky"
+// Risk tile choice for risk events: "quick" | "deep"
+// Recon tile choice for recon events: "auto" | "manual"
+// Sampling tile choice: 90 | 95 | 99
+// Note: "overconfident" and "chaotic" are resolved dynamically in gameLogic.js
 export const AI_STRATEGIES = {
-  aggressive:    { roll: "risky",  riskTile: "deep",   reconTile: "automated", samplingTile: 90 },
-  conservative:  { roll: "safe",   riskTile: "quick",  reconTile: "manual",    samplingTile: 99 },
+  aggressive:    { roll: "risky",  riskTile: "deep",   reconTile: "auto", samplingTile: 90 },
+  conservative:  { roll: "safe",   riskTile: "quick",  reconTile: "manual", samplingTile: 99 },
 };
 
 export const PLAYERS = [
