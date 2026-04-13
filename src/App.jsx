@@ -242,17 +242,19 @@ export default function App() {
         if (tileType === TILE_TYPES.INBOX) {
           // Draw a card
           const { card, remaining, newDiscard } = drawCard(cardDeck, discardPile);
-          setCardDeck(remaining);
-          if (card.nuclear) setDiscardPile([...newDiscard, card]);
-          else setDiscardPile([...newDiscard, card]);
-          if (card) {
-            setTimeout(() => {
-              setCurrentCard(card);
-              setGameState("card");
-            }, 300);
-          } else {
+          if (!card) {
+            // Deck and discard both empty — skip card draw
             afterTurnEffects(playerIdx, updatedPlayers, updatedTrails, newHalfRolls);
+            return;
           }
+          setCardDeck(remaining);
+          // Nuclear cards are NOT added to discard — drawCard's reshuffle filter excludes nuclear
+          // but keeping them out here makes the intent explicit and prevents any edge-case confusion
+          if (!card.nuclear) setDiscardPile([...newDiscard, card]);
+          setTimeout(() => {
+            setCurrentCard(card);
+            setGameState("card");
+          }, 300);
           return;
         }
 
