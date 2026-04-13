@@ -65,8 +65,11 @@ export default function App() {
   const [log, setLog] = useState([]);
   const [gameSpeed, setGameSpeed] = useState("fast"); // "fast" | "normal"
   const logRef = useRef(null);
-  // Always holds the latest triggerAITurn — lets advanceTurn's setTimeout call it without a stale closure
+  // Always holds the latest versions of callbacks — lets setTimeouts call them without stale closures
   const triggerAITurnRef = useRef(null);
+  const handleRollForEventRef = useRef(null);
+  const handleDismissEventRef = useRef(null);
+  const handleDismissCardRef = useRef(null);
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -480,6 +483,35 @@ export default function App() {
     afterTurnEffects(currentPlayer, updatedPlayers, updatedTrails, updatedHalfRolls);
   }, [currentCard, currentPlayer, players, trailHistory, halfNextRoll, applyHours, movePlayer, updateTrail, addLog, afterTurnEffects]);
 
+  // Keep refs in sync so AI auto-advance useEffect always calls the latest versions
+  handleRollForEventRef.current = handleRollForEvent;
+  handleDismissEventRef.current = handleDismissEvent;
+  handleDismissCardRef.current = handleDismissCard;
+
+  // --- AI auto-advance through event and card modals ---
+  // Human players interact manually. AI players are auto-progressed after a short delay.
+  // In fast mode the modal is hidden for AI; in normal mode it shows briefly.
+  useEffect(() => {
+    if (currentPlayer === 0) return; // human plays manually
+    const fast = gameSpeed === "fast";
+
+    if (gameState === "event" && currentEvent) {
+      if (eventPhase === "show") {
+        const t = setTimeout(() => handleRollForEventRef.current?.(), fast ? 150 : 600);
+        return () => clearTimeout(t);
+      }
+      if (eventPhase === "resolve") {
+        const t = setTimeout(() => handleDismissEventRef.current?.(), fast ? 150 : 800);
+        return () => clearTimeout(t);
+      }
+    }
+
+    if (gameState === "card" && currentCard) {
+      const t = setTimeout(() => handleDismissCardRef.current?.(), fast ? 200 : 800);
+      return () => clearTimeout(t);
+    }
+  }, [currentPlayer, gameState, currentEvent, eventPhase, currentCard, gameSpeed]);
+
   // --- Game start ---
   const startGame = () => {
     setPlayers(makePlayers());
@@ -656,8 +688,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Modals */}
-      {gameState === "event" && currentEvent && (
+      {/* Modals — hidden for AI in fast mode (auto-advance handles state silently) */}
+      {gameState === "event" && currentEvent && (currentPlayer === 0 || gameSpeed === "normal") && (
         <EventModal
           currentEvent={currentEvent}
           eventPhase={eventPhase}
@@ -674,7 +706,7 @@ export default function App() {
         />
       )}
 
-      {gameState === "card" && currentCard && (
+      {gameState === "card" && currentCard && (currentPlayer === 0 || gameSpeed === "normal") && (
         <CardDrawModal
           card={currentCard}
           onDismiss={handleDismissCard}
