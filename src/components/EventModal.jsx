@@ -119,10 +119,10 @@ export default function EventModal({
           </div>
         )}
 
-        {eventPhase === "show" && (currentEvent.type === "dice" || currentEvent.type === "boss") && (
+        {eventPhase === "show" && currentEvent.advance == null && (
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 10, color: "#6b7f99", marginBottom: 8 }}>
-              {currentEvent.type === "boss" ? "Roll 4+ to pass the partner review" : "Roll 3+ to succeed"}
+              {currentEvent.type === "boss" ? "Roll 4+ to pass the partner review" : "Roll d6 to resolve"}
             </div>
             <button onClick={onRollForEvent} style={primaryBtn}>Roll for it!</button>
           </div>
