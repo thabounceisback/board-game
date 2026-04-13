@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   rollDice,
   isDoubles,
@@ -12,7 +12,7 @@ import {
   checkClosingSprint,
 } from "./gameLogic";
 import { CARD_DECK } from "../data/cards";
-import { PLAYERS, STARTING_HOURS, PROMOTION_THRESHOLD } from "../data/players";
+import { PROMOTION_THRESHOLD } from "../data/players";
 
 describe("rollDice", () => {
   it("returns an array of the requested length", () => {
@@ -52,9 +52,9 @@ describe("shuffleDeck", () => {
     expect(shuffledIds).toEqual(originalIds);
   });
   it("does not mutate the original array", () => {
-    const original = [...CARD_DECK];
+    const originalIds = CARD_DECK.map((c) => c.id);
     shuffleDeck(CARD_DECK);
-    expect(CARD_DECK[0].id).toBe(original[0].id);
+    expect(CARD_DECK.map((c) => c.id)).toEqual(originalIds);
   });
 });
 
@@ -100,6 +100,9 @@ describe("resolveAIRollChoice", () => {
     expect(choices.has("safe")).toBe(true);
     expect(choices.has("risky")).toBe(true);
   });
+  it("overconfident returns safe when exactly 4 ahead", () => {
+    expect(resolveAIRollChoice("overconfident", { position: 19, humanPosition: 15 })).toBe("safe");
+  });
 });
 
 describe("resolveAITileChoice", () => {
@@ -112,6 +115,24 @@ describe("resolveAITileChoice", () => {
     expect(resolveAITileChoice("conservative", "risk")).toBe("quick");
     expect(resolveAITileChoice("conservative", "recon")).toBe("manual");
     expect(resolveAITileChoice("conservative", "sampling")).toBe(99);
+  });
+  it("overconfident picks same as aggressive (deep/auto/90)", () => {
+    expect(resolveAITileChoice("overconfident", "risk")).toBe("deep");
+    expect(resolveAITileChoice("overconfident", "recon")).toBe("auto");
+    expect(resolveAITileChoice("overconfident", "sampling")).toBe(90);
+  });
+  it("chaotic returns a valid choice for each tile type", () => {
+    const riskChoices = new Set();
+    const reconChoices = new Set();
+    const samplingChoices = new Set();
+    for (let i = 0; i < 50; i++) {
+      riskChoices.add(resolveAITileChoice("chaotic", "risk"));
+      reconChoices.add(resolveAITileChoice("chaotic", "recon"));
+      samplingChoices.add(resolveAITileChoice("chaotic", "sampling"));
+    }
+    expect([...riskChoices].every((c) => ["quick", "deep"].includes(c))).toBe(true);
+    expect([...reconChoices].every((c) => ["manual", "auto"].includes(c))).toBe(true);
+    expect([...samplingChoices].every((c) => [90, 95, 99].includes(c))).toBe(true);
   });
 });
 
@@ -170,5 +191,12 @@ describe("checkClosingSprint", () => {
       { position: 10, hours: 20 },
     ];
     expect(checkClosingSprint(players, false)).toBeNull();
+  });
+  it("returns the further-ahead player when two players tie on hours within window", () => {
+    const players = [
+      { position: 33, hours: 20 },
+      { position: 35, hours: 20 },
+    ];
+    expect(checkClosingSprint(players, false)).toBe(1);
   });
 });

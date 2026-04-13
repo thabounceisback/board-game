@@ -4,7 +4,6 @@ import {
   BURNOUT_THRESHOLD,
   CLOSING_SPRINT_WINDOW,
   BOARD_FINISH,
-  AI_STRATEGIES,
 } from "../data/players";
 
 // --- Dice ---
@@ -32,6 +31,8 @@ export function shuffleDeck(deck) {
  * Draw the top card from deck.
  * If deck is empty, reshuffle discard (excluding nuclear cards) into a new deck.
  * Returns { card, remaining, newDiscard }.
+ * NOTE: The drawn card is NOT automatically added to newDiscard.
+ * Callers must push card into their own discard pile after calling this.
  */
 export function drawCard(deck, discard) {
   if (deck.length === 0) {
@@ -42,7 +43,7 @@ export function drawCard(deck, discard) {
     return { card, remaining: newDeck.slice(1), newDiscard: discard.filter((c) => c.nuclear) };
   }
   const card = deck[0];
-  return { card, remaining: deck.slice(1), newDiscard: discard };
+  return { card, remaining: deck.slice(1), newDiscard: [...discard] };
 }
 
 // --- AI strategy ---
